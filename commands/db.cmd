@@ -40,8 +40,29 @@ case "${WARDEN_PARAMS[0]}" in
             mysql -u"${MYSQL_USER}" -p"${MYSQL_PASSWORD}" --database="${MYSQL_DATABASE}" "${WARDEN_PARAMS[@]:1}" "$@"
         ;;
     dump)
+        if [[ "${WARDEN_PARAMS[1]}" == "--cloud" ]]; then
+            # Check if magento-cloud is installed
+            if ! command -v magento-cloud &> /dev/null; then
+                fatal "magento-cloud CLI is not installed. Please install it first: https://experienceleague.adobe.com/en/docs/commerce-cloud-service/user-guide/dev-tools/cloud-cli/cloud-cli-overview"
+            fi
+
+            # Check if the user is logged into magento-cloud
+            if ! magento-cloud auth:info &> /dev/null; then
+                fatal "You are not logged into magento-cloud. Please run 'magento-cloud login' first."
+            fi
+
+            # Extract the environment from the parameters
+            environment="${WARDEN_PARAMS[3]}"
+            if [[ -z "$environment" ]]; then
+                fatal "Environment not specified. Usage: warden db-dump --cloud --environment <environment>"
+            fi
+
+            # Run the magento-cloud command with a timeout
+            timeout 30s magento-cloud db:dump -p "$WARDEN_ENV_NAME" -e "$environment" || fatal "Command timed out. Make sure you're connected to the correct project and environment."
+        else
             "$WARDEN_BIN" env exec -T db \
-            mysqldump -u"${MYSQL_USER}" -p"${MYSQL_PASSWORD}" "${MYSQL_DATABASE}" "${WARDEN_PARAMS[@]:1}" "$@"
+                mysqldump -u"${MYSQL_USER}" -p"${MYSQL_PASSWORD}" "${MYSQL_DATABASE}" "${WARDEN_PARAMS[@]:1}" "$@"
+        fi
         ;;
     *)
         fatal "The command \"${WARDEN_PARAMS[0]}\" does not exist. Please use --help for usage."
